@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stack Counter — Count Books & Magazines from a Photo</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+         background: #fafafa; color: #111; line-height: 1.5; }
+  header { max-width: 720px; margin: 0 auto; padding: 48px 20px 8px; text-align: center; }
+  header h1 { font-size: 2rem; font-weight: 700; letter-spacing: -0.02em; }
+  header p { color: #555; margin-top: 8px; }
+  main { max-width: 720px; margin: 0 auto; padding: 24px 20px 64px; }
+  .capture-box { background: #fff; border: 1px solid #e5e5e5; border-radius: 14px;
+                 padding: 20px; text-align: center; }
+  .capture-box label.btn { display: inline-block; padding: 14px 24px; font-size: 1rem;
+                 border: 0; border-radius: 10px; background: #111; color: #fff; cursor: pointer; }
+  .capture-box input[type="file"] { display: none; }
+  .capture-box .hint { color: #888; font-size: 0.85rem; margin-top: 10px; }
+  #preview-wrap { margin-top: 16px; display: none; }
+  #preview-wrap img { max-width: 100%; border-radius: 10px; border: 1px solid #eee; }
+  #count-btn { margin-top: 16px; padding: 14px 24px; font-size: 1rem; border: 0;
+               border-radius: 10px; background: #111; color: #fff; cursor: pointer; width: 100%; }
+  #count-btn:disabled { opacity: 0.5; cursor: wait; }
+  #status { text-align: center; color: #555; min-height: 1.5em; margin: 12px 0 4px; }
+  #results { display: none; background: #fff; border: 1px solid #e5e5e5;
+             border-radius: 14px; padding: 20px; margin-top: 8px; }
+  #results h2 { font-size: 1.25rem; margin-bottom: 12px; }
+  .totals { display: flex; gap: 12px; margin-bottom: 16px; }
+  .total { flex: 1; text-align: center; background: #fafafa; border: 1px solid #eee;
+           border-radius: 10px; padding: 12px 6px; }
+  .total .num { font-size: 2rem; font-weight: 700; }
+  .total .lbl { color: #666; font-size: 0.85rem; }
+  #stack-list { list-style: none; }
+  #stack-list li { padding: 8px 0; border-top: 1px solid #eee; color: #333; }
+  #notes { color: #666; font-size: 0.9rem; margin-top: 12px; }
+  .note { text-align: center; color: #888; font-size: 0.85rem; margin-top: 28px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Stack Counter</h1>
+  <p>Photograph a stack of books and magazines — the AI counts them and gives you the result.</p>
+</header>
+<main>
+  <div class="capture-box">
+    <label class="btn" for="photo-input">📷 Take a photo</label>
+    <input type="file" id="photo-input" accept="image/*" capture="environment">
+    <p class="hint">On a phone this opens the camera; on a computer it lets you pick an image file.</p>
+    <div id="preview-wrap"><img id="preview" alt="Your photo preview"></div>
+    <button id="count-btn" disabled>Count books &amp; magazines</button>
+  </div>
+  <div id="status"></div>
+  <section id="results">
+    <h2>Count result</h2>
+    <div class="totals">
+      <div class="total"><div class="num" id="total-books">–</div><div class="lbl">Books</div></div>
+      <div class="total"><div class="num" id="total-magazines">–</div><div class="lbl">Magazines</div></div>
+      <div class="total"><div class="num" id="total-all">–</div><div class="lbl">Total items</div></div>
+    </div>
+    <ul id="stack-list"></ul>
+    <p id="notes"></p>
+  </section>
+  <p class="note">Tip: photograph the stack from the side so the spines are visible — that is what the AI counts from.</p>
+</main>
+
+<script>
+// Backend (Cloudflare Worker) for this app.
+const BACKEND_URL = "https://book-stack-counter.dan-reddi.workers.dev";
+
+const photoInput = document.getElementById('photo-input');
+const previewWrap = document.getElementById('preview-wrap');
+const previewImg = document.getElementById('preview');
+const countBtn = document.getElementById('count-btn');
+const statusEl = document.getElementById('status');
+const resultsEl = document.getElementById('results');
+let photoDataUrl = null; // downscaled JPEG data URL, ready to send
+
+photoInput.addEventListener('change', () => {
+  const file = photoInput.files && photoInput.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    const img = new Image();
+    img.onload = () => {
+      // Downscale so the upload stays fast and well within API limits.
+      const MAX_SIDE = 1600;
+      let w = img.width, h = img.height;
+      if (Math.max(w, h) > MAX_SIDE) {
+        const scale = MAX_SIDE / Math.max(w, h);
+        w = Math.round(w * scale);
+        h = Math.round(h * scale);
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      photoDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+      previewImg.src = photoDataUrl;
+      previewWrap.style.display = 'block';
+      resultsEl.style.display = 'none';
+      countBtn.disabled = false;
+      statusEl.textContent = 'Photo ready — tap "Count books & magazines".';
+    };
+    img.src = reader.result;
+  };
+  reader.readAsDataURL(file);
+});
+
+countBtn.addEventListener('click', async () => {
+  if (!photoDataUrl) return;
+  countBtn.disabled = true;
+  statusEl.textContent = 'Counting… the AI is looking at the spines.';
+  resultsEl.style.display = 'none';
+  try {
+    const res = await fetch(BACKEND_URL + '/count', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image: photoDataUrl })
+    });
+    if (!res.ok) {
+      let msg = 'Something went wrong counting. Please try again.';
+      try {
+        const errData = await res.json();
+        if (errData && /503/.test(errData.error || '')) msg = "Google's AI is busy right now — please try again in a moment.";
+      } catch (_) {}
+      throw new Error(msg);
+    }
+    const data = await res.json();
+    document.getElementById('total-books').textContent = data.books ?? '–';
+    document.getElementById('total-magazines').textContent = data.magazines ?? '–';
+    document.getElementById('total-all').textContent = data.total ?? '–';
+    const list = document.getElementById('stack-list');
+    list.innerHTML = '';
+    (data.stacks || []).forEach((s, i) => {
+      const li = document.createElement('li');
+      li.textContent = (s.label || ('Stack ' + (i + 1))) + ': ' +
+        (s.books ?? 0) + ' books, ' + (s.magazines ?? 0) + ' magazines';
+      list.appendChild(li);
+    });
+    document.getElementById('notes').textContent = data.notes || '';
+    resultsEl.style.display = 'block';
+    statusEl.textContent = 'Done.';
+  } catch (err) {
+    statusEl.textContent = err.message || 'Something went wrong counting. Please try again.';
+    console.error(err);
+  } finally {
+    countBtn.disabled = false;
+  }
+});
+</script>
+</body>
+</html>

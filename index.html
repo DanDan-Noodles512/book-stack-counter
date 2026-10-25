@@ -46,11 +46,9 @@
 </header>
 <main>
   <div class="capture-box">
-    <label class="btn" for="photo-input">📷 Take a photo</label>
-    <input type="file" id="photo-input" accept="image/*" capture="environment">
-    <label class="btn" for="upload-input" style="background:#fff;color:#111;border:1px solid #ddd;margin-left:8px;">🖼️ Upload a photo</label>
+    <label class="btn" for="upload-input">🖼️ Upload a photo</label>
     <input type="file" id="upload-input" accept="image/*">
-    <p class="hint">Take a photo opens the camera; Upload lets you pick a photo already on your device.</p>
+    <p class="hint">Pick a photo from your library, or take a new one — on a phone you'll get both options.</p>
     <div id="preview-wrap"><img id="preview" alt="Your photo preview"></div>
     <button id="count-btn" disabled>Count books &amp; magazines</button>
   </div>
@@ -72,7 +70,6 @@
 // Backend (Cloudflare Worker) for this app.
 const BACKEND_URL = "https://book-stack-counter.dan-reddi.workers.dev";
 
-const photoInput = document.getElementById('photo-input');
 const uploadInput = document.getElementById('upload-input');
 const previewWrap = document.getElementById('preview-wrap');
 const previewImg = document.getElementById('preview');
@@ -80,11 +77,6 @@ const countBtn = document.getElementById('count-btn');
 const statusEl = document.getElementById('status');
 const resultsEl = document.getElementById('results');
 let photoDataUrl = null; // downscaled JPEG data URL, ready to send
-
-photoInput.addEventListener('change', () => {
-  const file = photoInput.files && photoInput.files[0];
-  if (file) handleFile(file);
-});
 
 uploadInput.addEventListener('change', () => {
   const file = uploadInput.files && uploadInput.files[0];

@@ -98,10 +98,17 @@ async function count(request, env, cors) {
     const data = await res.json();
     let raw = data.choices?.[0]?.message?.content || "";
     raw = raw.replace(/^\s*```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "").trim();
-    let parsed;
+    let parsed = null;
     try {
       parsed = JSON.parse(raw);
     } catch (_) {
+      // Model wrapped the JSON in prose: pull out the first {...} block.
+      const m = raw.match(/\{[\s\S]*\}/);
+      if (m) { try { parsed = JSON.parse(m[0]); } catch (_) {} }
+    }
+    if (!parsed) {
+      // A garbled answer is not a dead end — try the next model.
+      if (model !== models[models.length - 1]) continue;
       throw new Error("The AI did not return a countable result");
     }
     const books = Number(parsed.books) || 0;

@@ -124,7 +124,8 @@ countBtn.addEventListener('click', async () => {
       let msg = 'Something went wrong counting. Please try again.';
       try {
         const errData = await res.json();
-        if (errData && /503/.test(errData.error || '')) msg = "Google's AI is busy right now — please try again in a moment.";
+        if (errData && /503|429/.test(errData.error || '')) msg = "Google's AI is busy right now — please try again in a moment.";
+        else if (errData && /countable/.test(errData.error || '')) msg = "The AI couldn't read that photo clearly — try a closer side shot showing the spines, then count again.";
       } catch (_) {}
       throw new Error(msg);
     }
